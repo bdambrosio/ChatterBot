@@ -1,0 +1,17 @@
+[Unit]
+Description=ChatterBot Zenoh router
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bruce
+Group=bruce
+# Adjust the zenohd path/version to match the installed router binary.
+WorkingDirectory=/home/bruce/zenoh/1.9.0
+ExecStart=/home/bruce/zenoh/1.9.0/zenohd -c /home/bruce/Documents/Projects/ChatterBot/deploy/zenohd-router.json
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
