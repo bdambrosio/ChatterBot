@@ -1,2 +1,0 @@
-# Servo control via PCA9685 (16-channel I2C PWM driver)
-adafruit-circuitpython-servokit>=1.3.0
