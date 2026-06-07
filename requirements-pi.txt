@@ -1,0 +1,8 @@
+# Pi-side (on-bot) dependencies. Install on the Raspberry Pi.
+adafruit-circuitpython-servokit>=1.3.0
+eclipse-zenoh>=1.0.0
+
+# picamera2 is NOT installed via pip on Raspberry Pi OS — use apt:
+#   sudo apt install -y python3-picamera2
+# (so run the Pi services with the system Python, or a venv created with
+#  --system-site-packages so picamera2 is visible)

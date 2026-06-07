@@ -1,0 +1,20 @@
+{
+  "zenoh": {
+    "connect_endpoints": ["tcp/127.0.0.1:7447"]
+  },
+  "head": {
+    "pan_channel": 0,
+    "tilt_channel": 1,
+    "channels": 16,
+    "pulse_min_us": 500,
+    "pulse_max_us": 2500,
+    "status_hz": 5
+  },
+  "camera": {
+    "width": 1280,
+    "height": 720,
+    "jpeg_quality": 85,
+    "hflip": false,
+    "vflip": false
+  }
+}

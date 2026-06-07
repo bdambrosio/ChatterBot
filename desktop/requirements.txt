@@ -1,0 +1,3 @@
+# Desktop-side dependencies. Install on the desktop (off-bot).
+eclipse-zenoh>=1.0.0
+PyQt6>=6.4
