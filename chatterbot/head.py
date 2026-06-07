@@ -122,8 +122,11 @@ class HeadController:
             time.sleep(delay)
         self.look_at(pan=base)
 
-    def scan(self, low=0, high=180, step=5, delay=0.02):
-        """Sweep the pan axis across its range and back (a 'looking around')."""
+    def scan(self, low=0, high=180, step=5, delay=0.05):
+        """Sweep the pan axis across its range and back (a 'looking around').
+
+        Angular rate is step/delay degrees per second (~100 deg/s by default).
+        """
         for a in range(low, high + 1, step):
             self.pan = a
             time.sleep(delay)
