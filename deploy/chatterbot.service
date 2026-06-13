@@ -1,0 +1,22 @@
+[Unit]
+Description=ChatterBot Pi services (head + camera)
+After=network-online.target zenohd.service
+Wants=network-online.target
+# Start after the router, but a router restart should not tear this down
+# (the services reconnect on their own), so this is Wants, not Requires.
+Wants=zenohd.service
+
+[Service]
+Type=simple
+User=bruce
+Group=bruce
+WorkingDirectory=/home/bruce/Documents/Projects/ChatterBot
+# picamera2 is an apt package, not pip — run with the system Python so it is
+# visible. If you use a venv, create it with --system-site-packages and point
+# ExecStart at that venv's python instead.
+ExecStart=/usr/bin/python3 -m chatterbot.launcher
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

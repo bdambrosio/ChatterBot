@@ -38,4 +38,26 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now zenohd
 ```
 
-Then start the ChatterBot services: `python -m chatterbot.launcher`.
+## ChatterBot services (`chatterbot.launcher`)
+
+The launcher starts the head + camera services and restarts any that die. It
+needs the zenoh router up first.
+
+Manually:
+
+```bash
+python -m chatterbot.launcher
+```
+
+Or as a service (starts after `zenohd`, comes up on boot):
+
+```bash
+sudo cp deploy/chatterbot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chatterbot
+```
+
+`chatterbot.service` runs with the system Python (`/usr/bin/python3`) so the
+apt-installed `picamera2` is visible. If you use a venv, create it with
+`--system-site-packages` and edit `ExecStart` to point at that venv's python.
+Adjust `WorkingDirectory`/`User` if your checkout path or user differs.
