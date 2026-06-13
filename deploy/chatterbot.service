@@ -11,10 +11,13 @@ Type=simple
 User=bruce
 Group=bruce
 WorkingDirectory=/home/bruce/Documents/Projects/ChatterBot
-# picamera2 is an apt package, not pip — run with the system Python so it is
-# visible. If you use a venv, create it with --system-site-packages and point
-# ExecStart at that venv's python instead.
-ExecStart=/usr/bin/python3 -m chatterbot.launcher
+# Runs from the project venv, which must be created with --system-site-packages
+# so the apt-installed picamera2 is visible:
+#   python3 -m venv --system-site-packages .venv
+#   .venv/bin/pip install -r requirements-pi.txt
+# If you instead installed the deps into the system Python, use
+# /usr/bin/python3 here.
+ExecStart=/home/bruce/Documents/Projects/ChatterBot/.venv/bin/python -m chatterbot.launcher
 Restart=always
 RestartSec=2
 
