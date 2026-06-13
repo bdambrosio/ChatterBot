@@ -18,6 +18,7 @@ import base64
 import json
 import os
 import sys
+import threading
 
 from PyQt6.QtCore import Qt, QObject, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
@@ -165,6 +166,16 @@ class ControlPanel(QWidget):
             f"[{msg.get('state')}]")
 
 
+def wait_for_head_heartbeat(session, timeout=3.0):
+    """head_service publishes status at ~5 Hz; one message within `timeout`
+    proves the Pi services (not just the router) are up."""
+    seen = threading.Event()
+    sub = session.declare_subscriber(HEAD_STATUS, lambda _s: seen.set())
+    ok = seen.wait(timeout)
+    sub.undeclare()
+    return ok
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -174,9 +185,29 @@ def main():
     )
     args = parser.parse_args()
 
-    session = open_session(args.connect)
+    try:
+        session = open_session(args.connect)
+    except Exception as e:
+        print(f"error: cannot reach zenoh router at {args.connect}: {e}",
+              file=sys.stderr)
+        print("hint: is the Pi up? Its DHCP address may have changed — "
+              "pass --connect tcp/<pi-ip>:7447 (see STATUS.md).",
+              file=sys.stderr)
+        sys.exit(1)
+
+    heartbeat = wait_for_head_heartbeat(session)
+    if heartbeat:
+        print("startup check: router reachable, head status heartbeat OK")
+    else:
+        print("warning: router reachable but no head status heartbeat — "
+              "is `python -m chatterbot.launcher` running on the Pi?",
+              file=sys.stderr)
+
     app = QApplication(sys.argv)
     panel = ControlPanel(session)
+    if not heartbeat:
+        panel.status_lbl.setText(
+            "head: no heartbeat — launcher running on the Pi?")
     panel.resize(1100, 560)
     panel.show()
     try:
