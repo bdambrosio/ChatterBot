@@ -8,6 +8,8 @@
     "channels": 16,
     "pulse_min_us": 500,
     "pulse_max_us": 2500,
+    "pan_neutral": 90,
+    "tilt_neutral": 113,
     "status_hz": 5
   },
   "camera": {

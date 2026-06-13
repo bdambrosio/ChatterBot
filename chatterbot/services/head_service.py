@@ -21,6 +21,8 @@ def main():
         tilt_channel=hc.get("tilt_channel", 1),
         channels=hc.get("channels", 16),
         pulse_range=(hc.get("pulse_min_us", 500), hc.get("pulse_max_us", 2500)),
+        pan_neutral=hc.get("pan_neutral", 90),
+        tilt_neutral=hc.get("tilt_neutral", 113),
     )
     session = zh.open_session(cfg)
     state = {"mode": "idle", "doa_follow": False}

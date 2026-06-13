@@ -12,7 +12,10 @@ from adafruit_servokit import ServoKit
 class HeadController:
     """Controls the two-axis (pan/tilt) head.
 
-    Angles are in degrees, 0-180, with 90 as center.
+    Angles are in degrees (servo 0-180). Neutral is *not* (90, 90): this mount's
+    measured horizontal is tilt ~115, so the attentive forward pose is about
+    (90, 113). Neutral is configurable via ``pan_neutral``/``tilt_neutral``.
+    See docs/gaze-support.md §1 for the measured geometry.
 
     Args:
         pan_channel: PCA9685 channel the pan servo is plugged into.
@@ -21,6 +24,8 @@ class HeadController:
         pulse_range: ``(min_us, max_us)`` pulse width for full servo travel.
             Many hobby servos want ~500-2500us rather than the 1000-2000
             default. Tune this to match your servos.
+        pan_neutral, tilt_neutral: the neutral/attentive pose ``center()``
+            returns to (measured per-mount; see docs/gaze-support.md §1).
     """
 
     def __init__(
@@ -29,18 +34,22 @@ class HeadController:
         tilt_channel=1,
         channels=16,
         pulse_range=(500, 2500),
+        pan_neutral=90,
+        tilt_neutral=113,
     ):
         self.kit = ServoKit(channels=channels)
         self.pan_channel = pan_channel
         self.tilt_channel = tilt_channel
+        self._pan_neutral = pan_neutral
+        self._tilt_neutral = tilt_neutral
 
         min_us, max_us = pulse_range
         self.kit.servo[pan_channel].set_pulse_width_range(min_us, max_us)
         self.kit.servo[tilt_channel].set_pulse_width_range(min_us, max_us)
 
         # Track current position so we can do smooth relative moves.
-        self._pan = 90
-        self._tilt = 90
+        self._pan = pan_neutral
+        self._tilt = tilt_neutral
 
     @staticmethod
     def _clamp(angle):
@@ -65,9 +74,9 @@ class HeadController:
         self.kit.servo[self.tilt_channel].angle = self._tilt
 
     def center(self, settle=1.0):
-        """Move both axes to center (90, 90)."""
-        self.pan = 90
-        self.tilt = 90
+        """Move both axes to the neutral/attentive pose (``*_neutral``)."""
+        self.pan = self._pan_neutral
+        self.tilt = self._tilt_neutral
         if settle:
             time.sleep(settle)
 
