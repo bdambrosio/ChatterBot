@@ -4,6 +4,9 @@ Status: **design only, pre-hardware.** This captures the intended architecture
 so implementation can start cleanly when hardware arrives. No code committed for
 mic / camera / audio yet.
 
+> The "desktop-side" tier described here is realized by the Cognitive_workbench
+> agent ("Jill"). See `docs/jill-integration.md` for that binding.
+
 ## 1. What ChatterBot is
 
 A **stationary** Raspberry Pi "companion bot" head. It listens, looks, speaks,

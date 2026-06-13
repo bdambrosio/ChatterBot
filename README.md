@@ -8,7 +8,9 @@ ChatterBot is a companion robot head built on a Raspberry Pi. The head moves on
 two axes (pan/tilt) driven by hobby servos through an Adafruit PCA9685 16-channel
 I2C PWM board.
 
-See `DESIGN.md` for the full pi-side / desktop-side architecture.
+See `DESIGN.md` for the full pi-side / desktop-side architecture, and
+`docs/jill-integration.md` for how the Cognitive_workbench agent ("Jill") drives
+and senses through the head.
 
 ## Hardware
 
