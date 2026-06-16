@@ -94,17 +94,29 @@ class XVF3800Audio:
 
     def __init__(self, capture_device="plughw:CARD=Array",
                  playback_device="plughw:CARD=Array",
-                 sample_rate=16000, channels=2, frame_ms=20):
+                 sample_rate=16000, channels=2, frame_ms=20,
+                 card="Array", playback_volume_pct=None):
         self.capture_device = capture_device
         self.playback_device = playback_device
         self.sample_rate = sample_rate
         self.channels = channels
         self.frame_ms = frame_ms
+        self.card = card
+        self.playback_volume_pct = playback_volume_pct
         self.frame_bytes = int(sample_rate * channels * 2 * frame_ms / 1000)
         self._cap = None
         self._play = None
 
     def start(self):
+        # Set the device output level (the XVF3800 boots at ~-23 dB, which is too
+        # quiet). No sudo needed for the mixer. Volatile across reboots, so we set
+        # it on every start rather than relying on a saved alsactl state.
+        if self.playback_volume_pct is not None:
+            subprocess.run(
+                ["amixer", "-c", self.card, "sset", "PCM",
+                 f"{self.playback_volume_pct}%"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
         common = ["-f", "S16_LE", "-c", str(self.channels), "-r", str(self.sample_rate)]
         # Persistent playback reading raw PCM from stdin. A small buffer keeps the
         # idle-silence backlog short so queued TTS starts promptly; aplay blocks

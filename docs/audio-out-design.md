@@ -1,9 +1,14 @@
 # ChatterBot audio-out ("say") design
 
-Status: **Pi player built; live end-to-end test pending.** How the bot accepts
-audio to speak. Read alongside `DESIGN.md §7` (AEC), `jill-integration.md` (the
-CW binding), and `xvf3800-setup.md` (device facts). Shared with
-Cognitive_workbench (CW's ElevenLabs "say" path is built).
+Status: **Pi player built + bench-verified; ElevenLabs live test pending.** A
+tone published to `audio/out` plays clear through the bot speaker. How the bot
+accepts audio to speak. Read alongside `DESIGN.md §7` (AEC),
+`jill-integration.md` (the CW binding), and `xvf3800-setup.md` (device facts).
+Shared with Cognitive_workbench (CW's ElevenLabs "say" path is built).
+
+> **Output level:** the XVF3800 boots its `PCM` playback at ~−23 dB (very soft).
+> `xvf_audio` sets it to `audio.playback_volume_pct` (default 100%) on startup
+> via `amixer` (no sudo). Volatile across reboots — hence set every start.
 
 ## Locked decisions
 
@@ -105,8 +110,6 @@ the AEC reference is always clocked, and gating is a local boolean.
 
 ## Still open (for CW comment)
 
-- Playback **volume/gain** — set via an XVF3800 control command or ALSA mixer?
-  Pick a default level.
 - Expose `tts_playing` as a `chatter/status` field, or leave it implicit (mic
   silence)?
 - ElevenLabs **model/voice** + latency mode choice (CW side).

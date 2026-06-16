@@ -65,7 +65,9 @@ def main():
     audio = XVF3800Audio(
         capture_device=ac.get("capture_device", "plughw:CARD=Array"),
         playback_device=ac.get("playback_device", "plughw:CARD=Array"),
-        sample_rate=rate, channels=channels, frame_ms=frame_ms)
+        sample_rate=rate, channels=channels, frame_ms=frame_ms,
+        card=ac.get("card", "Array"),
+        playback_volume_pct=ac.get("playback_volume_pct", 100))
     session = zh.open_session(cfg)
 
     state = {"speaking": False, "tts_playing": False, "run": True}

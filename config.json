@@ -37,6 +37,8 @@
   "audio": {
     "capture_device": "plughw:CARD=Array",
     "playback_device": "plughw:CARD=Array",
+    "card": "Array",
+    "playback_volume_pct": 100,
     "sample_rate": 16000,
     "channels": 2,
     "frame_ms": 20,
