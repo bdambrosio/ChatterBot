@@ -157,7 +157,9 @@ this later).
   reflex — CW sends `head/cmd {doa_deg}` on hearing "Jill" and the Pi maps the
   bearing to pan via its calibrated `config.json` `head.doa`
   (`docs/cw-voice-sensor.md` §5, calibration in `docs/xvf3800-setup.md` §6).
-- TODO — `audio_out`: play `audio/out` PCM through the XVF3800.
+- TODO — `audio/out` playback: merge `mic_driver` + `audio_out` into one duplex
+  `xvf_audio` service that plays TTS through the XVF3800 (AEC-clean, 16 kHz).
+  Design + locked decisions: `docs/audio-out-design.md`.
 - TODO — Head arbitration policy refinements (§5).
 
 **Cognitive_workbench (Jill side):**
@@ -275,11 +277,11 @@ list: `chatterbot/lib/topics.py` + `DESIGN.md §5`.
   seq (uint32, monotonic — detects drops), ts (float64). So **2 ch / 16 kHz /
   S16_LE**; downmix to mono for STT. Unpack code + per-utterance reassembly:
   `cw-voice-sensor.md §3`. Source of truth: `chatterbot/lib/audio_frame.py`.
-- **`audio/out`** (binary, TTS — to build): **same `audio_frame` framing**. Target
-  **16 kHz S16_LE** to match the XVF3800 USB playback device, and it **must** play
-  through the XVF3800 output (the AEC reference, `DESIGN.md §7`). Channel count
-  follows the device (2 ch; send mono duplicated) — finalize when `audio_out` is
-  built.
+- **`audio/out`** (binary, TTS — to build): **same `audio_frame` framing**,
+  **16 kHz S16_LE mono** (`channels=1`); the Pi upmixes to the device's 2 ch.
+  Source is ElevenLabs `pcm_16000` (no transcode). Must play through the XVF3800
+  output (the AEC reference, `DESIGN.md §7`). v1 = one payload per utterance.
+  Full design + locked decisions: `docs/audio-out-design.md`.
 - **`camera/image`** (JSON): `format:"jpeg_base64"`, `data_base64` (decode →
   JPEG bytes), plus `head_pose{pan,tilt}` and `settled`.
 
