@@ -141,7 +141,57 @@ The DoA→pan **orienting** is **not** a CW action — it's a Pi-local reflex
 (jill-integration §2). CW may *refine* the pose afterward (center a detected
 face) but should not try to chase `doa_deg` itself over the network.
 
-## 5. Self-voice gating (do not skip)
+## 5. Wake-word orient — turning toward the speaker
+
+**Head orientation toward a talker is CW-driven on a wake word, not an autonomous
+Pi reflex.** The Pi *has* a DoA reflex (`head_service`, `doa_follow`) that can
+glance at whoever speaks, but it is **off by default** — the XVF VAD is
+energy-based and fires on non-speech noise (chair squeaks, claps), so an
+always-on reflex twitches. Driving the turn from CW, gated on recognizing
+"Jill…", means the head only orients when actually addressed.
+
+The mechanism reuses what mic_driver already publishes — no new Pi work:
+
+1. Track the latest talker bearing from `voice/event` (you're already
+   subscribed, §2). Keep the `doa_deg` from the current utterance's `start`.
+2. When STT (the same audio you're consuming in §3) recognizes the wake word,
+   send **one** `head/cmd` carrying that bearing:
+
+```python
+latest_doa = {"deg": None}
+
+def on_voice_event(evt):              # from §2
+    if evt["vad"] == "start":
+        latest_doa["deg"] = evt["doa_deg"]
+    # ... existing concern-activation handling ...
+
+def on_wake_word():                   # called by your STT when it hears "Jill"
+    if latest_doa["deg"] is not None:
+        session.put("chatter/head/cmd", json.dumps({
+            "ts": time.time(),
+            "doa_deg": latest_doa["deg"],   # Pi maps bearing -> pan itself
+        }))
+```
+
+Key points:
+
+- **Send `doa_deg`, not `pan`.** `head/cmd` accepts `doa_deg` and the Pi applies
+  its own calibrated DoA→pan mapping (`config.json` `head.doa`). So the
+  calibration lives in exactly one place — CW never needs to know `front_deg`,
+  `sign`, or the pan envelope. (You *may* send an explicit `pan` instead when you
+  already have an absolute angle, e.g. from a vision-centering loop.)
+- **Arbitration is automatic.** Any `head/cmd` suspends the Pi reflex for a
+  cooldown (jill-integration §5), so the deliberate orient and the reflex never
+  fight — even if you later enable the reflex.
+- **Refine with vision if you want.** After the coarse acoustic orient, the
+  Tier-2 `look-at-target` gaze loop (§8) can center the speaker's face precisely.
+- **Enabling the autonomous reflex (optional).** If you want ambient
+  "glance toward sound" liveliness, set `chatter/head/mode {doa_follow:true}`.
+  It is now persistence-gated (must hear a consistent bearing for ~1 s), so it
+  ignores transients — but it will still occasionally glance at sustained
+  non-speech sound. Leave it off for a pure intentional feel.
+
+## 6. Self-voice gating (do not skip)
 
 The XVF3800 does hardware AEC **only if TTS plays through its output path**
 (DESIGN.md §7), which suppresses speaker→mic echo. CW must still avoid
@@ -150,7 +200,7 @@ while CW is playing `chatter/audio/out`. Simplest policy: while a TTS playback i
 in flight (plus a short tail), drop `voice/event`/`audio/in`. Barge-in handling
 can relax this later. See jill-integration §6.
 
-## 6. Gotchas / open items
+## 7. Gotchas / open items
 
 - **DoA frame:** `doa_deg` is relative to the array's mount, not the room.
   Calibrate the offset (and any flip) before using it for absolute pointing.
@@ -161,7 +211,7 @@ can relax this later. See jill-integration §6.
 - **One utterance at a time:** the XVF3800 reports a single dominant talker;
   there is no multi-speaker separation on this path.
 
-## 7. CW build checklist
+## 8. CW build checklist
 
 - [ ] Subscribe to `chatter/voice/event` on the existing isolated ChatterLink
       session; normalize to a tagged async event in `sensor_runner`.
@@ -169,4 +219,6 @@ can relax this later. See jill-integration §6.
 - [ ] Downmix 2ch→mono, run STT on each segment.
 - [ ] Inject recognized text into the chat-loop as `[source: acoustic_sensor]`.
 - [ ] Wire the generic sensor-event → concern-activation ingress (§4).
-- [ ] Self-voice gate against `audio/out` playback (§5).
+- [ ] Wake-word orient: on "Jill", send `head/cmd {doa_deg}` from the latest
+      voice event (§5).
+- [ ] Self-voice gate against `audio/out` playback (§6).

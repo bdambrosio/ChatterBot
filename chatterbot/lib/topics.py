@@ -4,7 +4,7 @@ Single source of truth for the `chatter/...` namespace described in DESIGN.md.
 """
 
 # Desktop -> Pi
-HEAD_CMD = "chatter/head/cmd"          # {ts, pan?, tilt?, gesture?, smooth?}
+HEAD_CMD = "chatter/head/cmd"          # {ts, pan?, tilt?, doa_deg?, gesture?, smooth?}
 HEAD_MODE = "chatter/head/mode"        # {ts, doa_follow}
 CAMERA_CAPTURE = "chatter/camera/capture"  # {ts, request_id, width?, height?}
 HEARTBEAT = "chatter/heartbeat"        # {ts, seq}

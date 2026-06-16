@@ -21,9 +21,10 @@
       "deadzone_deg": 8,
       "cmd_cooldown_s": 2.0,
       "settle_s": 0.7,
-      "doa_window_s": 0.8,
-      "min_samples": 3,
-      "min_consistency": 0.5
+      "doa_window_s": 1.0,
+      "min_samples": 5,
+      "min_consistency": 0.65,
+      "min_span_s": 0.6
     }
   },
   "camera": {

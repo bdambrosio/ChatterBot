@@ -52,9 +52,12 @@ def main():
     cmd_cooldown = dc.get("cmd_cooldown_s", 2.0)   # suspend reflex after an explicit cmd
     settle_s = dc.get("settle_s", 0.7)           # go deaf this long after a move (servo
     #                                              noise feeds back into DoA otherwise)
-    window_s = dc.get("doa_window_s", 0.8)       # smoothing window
-    min_samples = dc.get("min_samples", 3)       # need this many readings to act
-    min_consistency = dc.get("min_consistency", 0.5)  # 0..1 circular agreement gate
+    window_s = dc.get("doa_window_s", 1.0)       # smoothing window
+    min_samples = dc.get("min_samples", 5)       # need this many readings to act
+    min_consistency = dc.get("min_consistency", 0.65)  # 0..1 circular agreement gate
+    min_span_s = dc.get("min_span_s", 0.6)       # readings must span this long — a
+    #     sustained source, not a transient (chair squeak, clack). The XVF VAD is
+    #     energy-based and fires on noise, so persistence is what rejects it.
     reflex_hz = max(1, dc.get("reflex_hz", 10))
 
     session = zh.open_session(cfg)
@@ -71,10 +74,11 @@ def main():
         return max(pan_min, min(pan_max, pan))
 
     def smoothed_target(now):
-        """Circular mean of recent bearings + an agreement score, or None.
+        """Circular mean of recent bearings + agreement + time span, or None.
 
-        Returns ``(mean_doa, consistency)`` where consistency is the resultant
-        length 0..1 (1 = all readings identical). None if too few samples.
+        Returns ``(mean_doa, consistency, span_s)``: consistency is the resultant
+        length 0..1 (1 = all readings identical); span_s is how long the readings
+        cover. None if too few samples.
         """
         while doa_hist and (now - doa_hist[0][0]) > window_s:
             doa_hist.popleft()
@@ -85,7 +89,8 @@ def main():
         n = len(doa_hist)
         consistency = math.hypot(xs, ys) / n
         mean_doa = math.degrees(math.atan2(ys, xs)) % 360.0
-        return mean_doa, consistency
+        span_s = doa_hist[-1][0] - doa_hist[0][0]
+        return mean_doa, consistency, span_s
 
     def publish_status(st):
         zh.publish_json(session, HEAD_STATUS, {
@@ -112,8 +117,14 @@ def main():
             elif gesture == "center":
                 head.center(settle=0)
             else:
+                pan = msg.get("pan")
+                # Orient by talker bearing: a caller (e.g. CW on a wake word) can
+                # send doa_deg and let the Pi apply its calibrated DoA→pan map,
+                # so the calibration lives in one place (config.json head.doa).
+                if pan is None and msg.get("doa_deg") is not None:
+                    pan = doa_to_pan(msg["doa_deg"])
                 head.look_at(
-                    pan=msg.get("pan"),
+                    pan=pan,
                     tilt=msg.get("tilt"),
                     smooth=msg.get("smooth", True),
                 )
@@ -153,7 +164,9 @@ def main():
                     and now >= state["settle_until"]
                     and (now - state["last_cmd_t"]) >= cmd_cooldown):
                 target = smoothed_target(now)
-                if target is not None and target[1] >= min_consistency:
+                if (target is not None
+                        and target[1] >= min_consistency
+                        and target[2] >= min_span_s):
                     pan_target = doa_to_pan(target[0])
                     if abs(pan_target - head.pan) >= deadzone:
                         # Saccade: one quick move to face the talker, then go deaf

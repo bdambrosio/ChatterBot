@@ -123,11 +123,15 @@ this later).
   (`chatterbot/services/mic_driver.py`, `chatterbot/xvf3800.py`,
   `chatterbot/lib/audio_frame.py`). Consumer guide: `docs/cw-voice-sensor.md`;
   device bring-up: `docs/xvf3800-setup.md`. Live-verified DoA/VAD on the Pi.
-- **DONE** — DoA reflex: `head_service` consumes `chatter/voice/event` and
-  turns the head toward the talker when `doa_follow` is set, with slew/deadzone
-  smoothing and an explicit-command cooldown for arbitration (§5). DoA→pan
-  mapping is config-driven (`config.json` `head.doa`) and needs a one-time
-  per-mount calibration — see `docs/xvf3800-setup.md` §6.
+- **DONE** — DoA reflex: `head_service` consumes `chatter/voice/event` and can
+  turn the head toward the talker when `doa_follow` is set — saccade (glance +
+  settle, goes deaf while moving so servo noise doesn't feed back) with a
+  persistence gate and an explicit-command cooldown for arbitration (§5).
+  **Off by default**: the XVF VAD is energy-based and fires on non-speech noise,
+  so the recommended pattern is CW-driven **wake-word orient**, not an always-on
+  reflex — CW sends `head/cmd {doa_deg}` on hearing "Jill" and the Pi maps the
+  bearing to pan via its calibrated `config.json` `head.doa`
+  (`docs/cw-voice-sensor.md` §5, calibration in `docs/xvf3800-setup.md` §6).
 - TODO — `audio_out`: play `audio/out` PCM through the XVF3800.
 - TODO — Head arbitration policy refinements (§5).
 
@@ -223,7 +227,7 @@ list: `chatterbot/lib/topics.py` + `DESIGN.md §5`.
 
 | Topic | Dir | Payload | Status |
 |---|---|---|---|
-| `chatter/head/cmd` | Jill→Pi | `{ts, pan?, tilt?, gesture?: nod\|shake\|scan\|center, smooth?}` | **implemented** |
+| `chatter/head/cmd` | Jill→Pi | `{ts, pan?, tilt?, doa_deg?, gesture?: nod\|shake\|scan\|center, smooth?}` | **implemented** |
 | `chatter/head/status` | Pi→Jill | `{ts, pan, tilt, state, mode}` (~5 Hz, `config.status_hz`) | **implemented** |
 | `chatter/head/mode` | Jill→Pi | `{ts, doa_follow}` | **implemented** (drives the DoA reflex) |
 | `chatter/camera/capture` | Jill→Pi | `{ts, request_id}` (width/height currently ignored) | **implemented** |
