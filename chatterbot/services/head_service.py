@@ -48,9 +48,10 @@ def main():
     gain = dc.get("gain", 1.0)                   # pan degrees per degree of bearing
     pan_min = dc.get("pan_min", 10)
     pan_max = dc.get("pan_max", 170)
-    deadzone = dc.get("deadzone_deg", 6)         # ignore sub-deadzone corrections
-    max_step = dc.get("max_step_deg", 12)        # max pan move per reflex tick (slew)
+    deadzone = dc.get("deadzone_deg", 8)         # don't saccade for sub-deadzone errors
     cmd_cooldown = dc.get("cmd_cooldown_s", 2.0)   # suspend reflex after an explicit cmd
+    settle_s = dc.get("settle_s", 0.7)           # go deaf this long after a move (servo
+    #                                              noise feeds back into DoA otherwise)
     window_s = dc.get("doa_window_s", 0.8)       # smoothing window
     min_samples = dc.get("min_samples", 3)       # need this many readings to act
     min_consistency = dc.get("min_consistency", 0.5)  # 0..1 circular agreement gate
@@ -59,7 +60,10 @@ def main():
     session = zh.open_session(cfg)
     head_lock = threading.Lock()  # serialize servo writes (cmd cb vs reflex tick)
     doa_hist = deque()            # (t, doa_deg) recent talker bearings
-    state = {"mode": "idle", "doa_follow": False, "last_cmd_t": 0.0}
+    # `settle_until`: ignore DoA until this time (during/after a saccade) so the
+    # head's own servo noise can't feed back into the bearing estimate.
+    state = {"mode": "idle", "doa_follow": False, "last_cmd_t": 0.0,
+             "settle_until": 0.0}
 
     def doa_to_pan(doa_deg):
         bearing = _wrap180(doa_deg - front_deg)        # 0 = ahead, +/- to the sides
@@ -121,7 +125,9 @@ def main():
     def on_voice(_key, msg):
         if msg.get("vad") in ("start", "active"):
             doa = msg.get("doa_deg")
-            if doa is not None:
+            # Drop readings taken while the head is moving/settling — they are
+            # dominated by servo noise, not the talker.
+            if doa is not None and time.time() >= state["settle_until"]:
                 doa_hist.append((time.time(), doa))
 
     zh.declare_subscriber_json(session, HEAD_CMD, on_cmd)
@@ -143,16 +149,20 @@ def main():
             now = time.time()
 
             reflex_moved = False
-            if state["doa_follow"] and (now - state["last_cmd_t"]) >= cmd_cooldown:
+            if (state["doa_follow"]
+                    and now >= state["settle_until"]
+                    and (now - state["last_cmd_t"]) >= cmd_cooldown):
                 target = smoothed_target(now)
                 if target is not None and target[1] >= min_consistency:
                     pan_target = doa_to_pan(target[0])
-                    delta = pan_target - head.pan
-                    if abs(delta) >= deadzone:
-                        step = max(-max_step, min(max_step, delta))
+                    if abs(pan_target - head.pan) >= deadzone:
+                        # Saccade: one quick move to face the talker, then go deaf
+                        # while the servos settle (see settle_until / on_voice).
                         with head_lock:
-                            head.look_at(pan=head.pan + step, smooth=True,
-                                         step=5, delay=0.01)
+                            head.look_at(pan=pan_target, smooth=True,
+                                         step=5, delay=0.012)
+                        doa_hist.clear()
+                        state["settle_until"] = time.time() + settle_s
                         reflex_moved = True
 
             if reflex_moved or tick % status_every == 0:

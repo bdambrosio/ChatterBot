@@ -18,9 +18,9 @@
       "gain": 1.0,
       "pan_min": 10,
       "pan_max": 170,
-      "deadzone_deg": 6,
-      "max_step_deg": 12,
+      "deadzone_deg": 8,
       "cmd_cooldown_s": 2.0,
+      "settle_s": 0.7,
       "doa_window_s": 0.8,
       "min_samples": 3,
       "min_consistency": 0.5
