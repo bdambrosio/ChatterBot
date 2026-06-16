@@ -10,7 +10,19 @@
     "pulse_max_us": 2500,
     "pan_neutral": 90,
     "tilt_neutral": 113,
-    "status_hz": 5
+    "status_hz": 5,
+    "doa": {
+      "reflex_hz": 10,
+      "front_deg": 180,
+      "sign": 1.0,
+      "gain": 1.0,
+      "pan_min": 10,
+      "pan_max": 170,
+      "deadzone_deg": 6,
+      "max_step_deg": 12,
+      "cmd_cooldown_s": 2.0,
+      "target_ttl_s": 1.5
+    }
   },
   "camera": {
     "width": 1280,

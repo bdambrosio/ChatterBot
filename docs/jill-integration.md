@@ -123,10 +123,13 @@ this later).
   (`chatterbot/services/mic_driver.py`, `chatterbot/xvf3800.py`,
   `chatterbot/lib/audio_frame.py`). Consumer guide: `docs/cw-voice-sensor.md`;
   device bring-up: `docs/xvf3800-setup.md`. Live-verified DoA/VAD on the Pi.
-- TODO — DOA reflex: make `doa_follow` actually drive the head. Today
-  `head_service.on_mode` caches the flag but no code consumes it.
-- `audio_out`: play `audio/out` PCM through the XVF3800.
-- Head arbitration policy (§5).
+- **DONE** — DoA reflex: `head_service` consumes `chatter/voice/event` and
+  turns the head toward the talker when `doa_follow` is set, with slew/deadzone
+  smoothing and an explicit-command cooldown for arbitration (§5). DoA→pan
+  mapping is config-driven (`config.json` `head.doa`) and needs a one-time
+  per-mount calibration — see `docs/xvf3800-setup.md` §6.
+- TODO — `audio_out`: play `audio/out` PCM through the XVF3800.
+- TODO — Head arbitration policy refinements (§5).
 
 **Cognitive_workbench (Jill side):**
 - **DONE** — `head-move` + `camera-capture` drop-in tools (`src/tools/`), over a
@@ -222,7 +225,7 @@ list: `chatterbot/lib/topics.py` + `DESIGN.md §5`.
 |---|---|---|---|
 | `chatter/head/cmd` | Jill→Pi | `{ts, pan?, tilt?, gesture?: nod\|shake\|scan\|center, smooth?}` | **implemented** |
 | `chatter/head/status` | Pi→Jill | `{ts, pan, tilt, state, mode}` (~5 Hz, `config.status_hz`) | **implemented** |
-| `chatter/head/mode` | Jill→Pi | `{ts, doa_follow}` | subscribed; reflex not wired |
+| `chatter/head/mode` | Jill→Pi | `{ts, doa_follow}` | **implemented** (drives the DoA reflex) |
 | `chatter/camera/capture` | Jill→Pi | `{ts, request_id}` (width/height currently ignored) | **implemented** |
 | `chatter/camera/image` | Pi→Jill | `{ts, request_id, format:"jpeg_base64", data_base64, width, height, head_pose, settled}` | **implemented** |
 | `chatter/voice/event` | Pi→Jill | `{ts, vad: start\|active\|stop, doa_deg, confidence}` | **implemented (Pi)** |

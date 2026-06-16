@@ -83,9 +83,19 @@ command table: `AEC_AZIMUTH_VALUES` (per-beam azimuths), `AEC_SPENERGY_VALUES`
 
 ## 6. Open items
 
-- **DoA frame orientation:** `doa_deg` is in the device's frame; the 0° heading
-  depends on how the array is mounted. Calibrate the DoA→pan mapping when the
-  head reflex is wired (DESIGN.md §6, `head_service` `doa_follow`).
+- **DoA frame orientation / reflex calibration:** `doa_deg` is in the device's
+  frame; the 0° heading depends on how the array is mounted. The DoA→pan reflex
+  (`head_service`, DESIGN.md §6) is config-driven via `config.json` `head.doa`:
+  - `front_deg` — the `doa_deg` value read when a talker is **dead ahead**.
+    Calibrate: enable the reflex (`chatter/head/mode {doa_follow:true}`), speak
+    from straight in front, read `doa_deg` off `chatter/voice/event`, set
+    `front_deg` to it.
+  - `sign` — `+1` or `-1`; flip if the head turns the **wrong way**.
+  - `gain` — pan° per ° of bearing (1.0 = direct; lower to under-rotate).
+  - `deadzone_deg` / `max_step_deg` / `cmd_cooldown_s` — anti-jitter, slew rate,
+    and how long an explicit `head/cmd` suspends the reflex.
+  The reflex stays off until `doa_follow` is set, so an uncalibrated mapping
+  never moves the head on its own.
 - **Confidence:** `mic_driver` currently reports a coarse confidence from the VAD
   flag. Reading `AEC_SPENERGY_VALUES` would give a graded value.
 - **audio_out ownership** of the playback stream (§2).
