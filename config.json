@@ -13,7 +13,7 @@
     "status_hz": 5,
     "doa": {
       "reflex_hz": 10,
-      "front_deg": 180,
+      "front_deg": 131,
       "sign": 1.0,
       "gain": 1.0,
       "pan_min": 10,
@@ -21,7 +21,9 @@
       "deadzone_deg": 6,
       "max_step_deg": 12,
       "cmd_cooldown_s": 2.0,
-      "target_ttl_s": 1.5
+      "doa_window_s": 0.8,
+      "min_samples": 3,
+      "min_consistency": 0.5
     }
   },
   "camera": {

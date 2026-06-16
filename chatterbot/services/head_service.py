@@ -9,8 +9,10 @@ round-trip. Run on the Pi:
     python -m chatterbot.services.head_service
 """
 
+import math
 import threading
 import time
+from collections import deque
 
 from ..head import HeadController
 from ..lib import zenoh_helpers as zh
@@ -36,35 +38,50 @@ def main():
     pan_neutral = hc.get("pan_neutral", 90)
 
     # DoA reflex tuning (DESIGN.md §6). The DoA→pan mapping is mount-specific and
-    # must be calibrated — see docs/xvf3800-setup.md §6. Disabled until the
-    # desktop/Jill sets doa_follow, so an uncalibrated mapping never moves on its
-    # own.
+    # must be calibrated — see docs/xvf3800-setup.md §6. Raw DoA is noisy, so a
+    # circular-mean filter over a short window with a consistency gate smooths it
+    # and rejects jumpy readings. Disabled until doa_follow is set, so an
+    # uncalibrated mapping never moves the head on its own.
     dc = hc.get("doa", {})
-    front_deg = dc.get("front_deg", 180.0)     # DoA reading that means "dead ahead"
-    sign = dc.get("sign", 1.0)                  # +1/-1: which way rising DoA turns
-    gain = dc.get("gain", 1.0)                  # pan degrees per degree of bearing
+    front_deg = dc.get("front_deg", 180.0)      # DoA reading that means "dead ahead"
+    sign = dc.get("sign", 1.0)                   # +1/-1: which way rising DoA turns
+    gain = dc.get("gain", 1.0)                   # pan degrees per degree of bearing
     pan_min = dc.get("pan_min", 10)
     pan_max = dc.get("pan_max", 170)
-    deadzone = dc.get("deadzone_deg", 6)        # ignore sub-deadzone corrections
-    max_step = dc.get("max_step_deg", 12)       # max pan move per reflex tick (slew)
-    cmd_cooldown = dc.get("cmd_cooldown_s", 2.0)  # suspend reflex after an explicit cmd
-    target_ttl = dc.get("target_ttl_s", 1.5)    # forget a talker bearing this stale
+    deadzone = dc.get("deadzone_deg", 6)         # ignore sub-deadzone corrections
+    max_step = dc.get("max_step_deg", 12)        # max pan move per reflex tick (slew)
+    cmd_cooldown = dc.get("cmd_cooldown_s", 2.0)   # suspend reflex after an explicit cmd
+    window_s = dc.get("doa_window_s", 0.8)       # smoothing window
+    min_samples = dc.get("min_samples", 3)       # need this many readings to act
+    min_consistency = dc.get("min_consistency", 0.5)  # 0..1 circular agreement gate
     reflex_hz = max(1, dc.get("reflex_hz", 10))
 
     session = zh.open_session(cfg)
     head_lock = threading.Lock()  # serialize servo writes (cmd cb vs reflex tick)
-    state = {
-        "mode": "idle",
-        "doa_follow": False,
-        "target_doa": None,
-        "target_t": 0.0,
-        "last_cmd_t": 0.0,
-    }
+    doa_hist = deque()            # (t, doa_deg) recent talker bearings
+    state = {"mode": "idle", "doa_follow": False, "last_cmd_t": 0.0}
 
     def doa_to_pan(doa_deg):
         bearing = _wrap180(doa_deg - front_deg)        # 0 = ahead, +/- to the sides
         pan = pan_neutral + sign * gain * bearing
         return max(pan_min, min(pan_max, pan))
+
+    def smoothed_target(now):
+        """Circular mean of recent bearings + an agreement score, or None.
+
+        Returns ``(mean_doa, consistency)`` where consistency is the resultant
+        length 0..1 (1 = all readings identical). None if too few samples.
+        """
+        while doa_hist and (now - doa_hist[0][0]) > window_s:
+            doa_hist.popleft()
+        if len(doa_hist) < min_samples:
+            return None
+        xs = sum(math.cos(math.radians(d)) for _, d in doa_hist)
+        ys = sum(math.sin(math.radians(d)) for _, d in doa_hist)
+        n = len(doa_hist)
+        consistency = math.hypot(xs, ys) / n
+        mean_doa = math.degrees(math.atan2(ys, xs)) % 360.0
+        return mean_doa, consistency
 
     def publish_status(st):
         zh.publish_json(session, HEAD_STATUS, {
@@ -102,12 +119,10 @@ def main():
         state["doa_follow"] = bool(msg.get("doa_follow", False))
 
     def on_voice(_key, msg):
-        # Cache the latest talker bearing; the reflex tick applies it.
         if msg.get("vad") in ("start", "active"):
             doa = msg.get("doa_deg")
             if doa is not None:
-                state["target_doa"] = doa
-                state["target_t"] = time.time()
+                doa_hist.append((time.time(), doa))
 
     zh.declare_subscriber_json(session, HEAD_CMD, on_cmd)
     zh.declare_subscriber_json(session, HEAD_MODE, on_mode)
@@ -128,18 +143,17 @@ def main():
             now = time.time()
 
             reflex_moved = False
-            if (state["doa_follow"]
-                    and state["target_doa"] is not None
-                    and (now - state["target_t"]) <= target_ttl
-                    and (now - state["last_cmd_t"]) >= cmd_cooldown):
-                pan_target = doa_to_pan(state["target_doa"])
-                delta = pan_target - head.pan
-                if abs(delta) >= deadzone:
-                    step = max(-max_step, min(max_step, delta))
-                    with head_lock:
-                        head.look_at(pan=head.pan + step, smooth=True,
-                                     step=5, delay=0.01)
-                    reflex_moved = True
+            if state["doa_follow"] and (now - state["last_cmd_t"]) >= cmd_cooldown:
+                target = smoothed_target(now)
+                if target is not None and target[1] >= min_consistency:
+                    pan_target = doa_to_pan(target[0])
+                    delta = pan_target - head.pan
+                    if abs(delta) >= deadzone:
+                        step = max(-max_step, min(max_step, delta))
+                        with head_lock:
+                            head.look_at(pan=head.pan + step, smooth=True,
+                                         step=5, delay=0.01)
+                        reflex_moved = True
 
             if reflex_moved or tick % status_every == 0:
                 publish_status("tracking" if reflex_moved else "idle")
