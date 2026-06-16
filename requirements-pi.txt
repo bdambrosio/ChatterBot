@@ -2,6 +2,12 @@
 adafruit-circuitpython-servokit>=1.3.0
 eclipse-zenoh>=1.0.0
 
+# reSpeaker XVF3800 control channel (DoA/VAD over USB). Audio capture/playback
+# uses arecord/aplay (alsa-utils, apt) — no Python audio dep. Needs a udev rule
+# for non-root USB access; see docs/xvf3800-setup.md.
+pyusb>=1.2
+libusb_package>=1.0
+
 # picamera2 is NOT installed via pip on Raspberry Pi OS — use apt:
 #   sudo apt install -y python3-picamera2
 # (so run the Pi services with the system Python, or a venv created with

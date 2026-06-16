@@ -15,6 +15,7 @@ import time
 SERVICES = [
     ("head_service", [sys.executable, "-m", "chatterbot.services.head_service"]),
     ("camera_service", [sys.executable, "-m", "chatterbot.services.camera_service"]),
+    ("mic_driver", [sys.executable, "-m", "chatterbot.services.mic_driver"]),
 ]
 
 BACKOFF_START_S = 1.0

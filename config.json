@@ -18,5 +18,17 @@
     "jpeg_quality": 85,
     "hflip": false,
     "vflip": false
+  },
+  "audio": {
+    "capture_device": "plughw:CARD=Array",
+    "playback_device": "plughw:CARD=Array",
+    "sample_rate": 16000,
+    "channels": 2,
+    "frame_ms": 20,
+    "gated": true,
+    "vad_poll_hz": 25,
+    "vad_start_frames": 2,
+    "vad_hangover_s": 0.6,
+    "voice_event_hz": 15
   }
 }

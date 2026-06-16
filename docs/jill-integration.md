@@ -117,24 +117,103 @@ this later).
 
 ## 7. What each project must build
 
-**ChatterBot (Pi side) — not yet implemented:**
-- `mic_driver`: XVF3800 capture + control-channel VAD/DOA → publish
-  `voice/event` and VAD-gated `audio/in`. (Topics declared in
-  `chatterbot/lib/topics.py`; no implementation yet.)
-- DOA reflex: make `doa_follow` actually drive the head. Today
+**ChatterBot (Pi side):**
+- **DONE** — `mic_driver`: XVF3800 capture + control-channel VAD/DOA → publishes
+  `voice/event` (start/active/stop + `doa_deg`) and VAD-gated binary `audio/in`
+  (`chatterbot/services/mic_driver.py`, `chatterbot/xvf3800.py`,
+  `chatterbot/lib/audio_frame.py`). Consumer guide: `docs/cw-voice-sensor.md`;
+  device bring-up: `docs/xvf3800-setup.md`. Live-verified DoA/VAD on the Pi.
+- TODO — DOA reflex: make `doa_follow` actually drive the head. Today
   `head_service.on_mode` caches the flag but no code consumes it.
 - `audio_out`: play `audio/out` PCM through the XVF3800.
 - Head arbitration policy (§5).
 
 **Cognitive_workbench (Jill side):**
-- `sensor_runner`: dedicated isolated zenoh session to the Pi router (§3).
-- VAD-segment → STT → text injection into the chat-loop with source tags.
-- Generic sensor-event → concern-activation ingress (§4).
-- Tool wrappers for `head/cmd` and `camera/capture`/`camera/image` (decode
-  base64 JPEG; filter `camera/image` by `request_id` since it is broadcast).
-- TTS → `audio/out`, with self-voice gating (§6).
+- **DONE** — `head-move` + `camera-capture` drop-in tools (`src/tools/`), over a
+  shared isolated zenoh session to the Pi (`src/utils/chatter_link.py`,
+  `ChatterLink`; endpoint `CHATTER_ROUTER`, default `tcp/192.168.68.78:7447`).
+  `head-move` does pan/tilt/gesture and waits for an `arrived` status;
+  `camera-capture` requests a frame, filters `camera/image` by `request_id`,
+  decodes the base64 JPEG, and feeds it to the model as vision input (see §8).
+  Discrete tools, not a `body`-style subagent — actuation/capture are direct,
+  no extra reasoning hop. Live-verified against the Pi.
+- **DONE** — captured-image-as-vision wiring + Tier-2 closed-loop gaze
+  (`look-at-target`) (§8).
+- TODO — `mic_driver` consumer: dedicated isolated zenoh session already exists
+  in `ChatterLink`; the STT path reuses it.
+- TODO — VAD-segment → STT → text injection into the chat-loop with source tags.
+- TODO — generic sensor-event → concern-activation ingress (§4).
+- TODO — TTS → `audio/out`, with self-voice gating (§6).
+- TODO — Tier-3 vision (reference-image library) (§8).
 
-## 8. Topic contract (current vs to-build)
+## 8. Vision: captured images as model input
+
+A captured frame reaches the model as real vision input, not just a display
+URL. The mechanism is generic: a drop-in tool may return
+`{"status","text","image":{"data_uri","label"}}`; `_dispatch_discovered_tool`
+(`src/chat/tools.py`) stashes it in a single most-recent slot
+(`self._pending_tool_image`), and `_run_react_loop` (`src/chat/react.py`)
+injects it into the multimodal `content` array alongside any `/paste` image —
+the same path user-supplied images already use. `camera-capture` is the first
+user: it inlines the JPEG as a base64 data-URI (a local model server can't fetch
+the `127.0.0.1` `/local` URL, so vision goes via the data-URI; the `/local` URL
+stays in the text observation for canvas display).
+
+Constraints / decisions:
+- **Backend-gated**: only the OpenAI-compat route carries image content
+  (`backend.supports_image_input`). The `jill-chat` world's `local` server with a
+  multimodal model (gemma4-34B) qualifies; Anthropic-native and legacy-cloud
+  routes do not.
+- **Per-turn, single slot**: the captured frame is in view for the rest of the
+  turn it was taken in, then cleared. No stale cross-turn frame — re-capture is
+  cheap. Only the most recent capture is kept.
+- **Cost**: ~110 KB of base64 per capture, resent each remaining iter of the
+  turn. Fine for single captures; relevant before Tier 2's gaze loop.
+
+Capability tiers:
+- **Tier 0 (done)** — capture + `display` to screen.
+- **Tier 1 (done)** — VQA on the current frame: "what do you see?", "am I in
+  frame?", "is there a cat?".
+- **Tier 2 (done)** — closed-loop gaze ("point at me", "center on the cat"):
+  the `look-at-target` tool (`src/tools/look-at-target/`). It runs the whole
+  acquire→center loop internally and reuses `ChatterLink` (pose read → absolute
+  `head/cmd` → capture) plus its own multimodal `backend.chat` judgements — so
+  it is one opaque step in the parent ReAct trace, and cheap per cycle (a small
+  downscaled frame + a tight question, not the whole conversation). Details below.
+- **Tier 3 (deferred)** — identity/recognition ("can you see John") against a
+  small reference-image library: multi-image LLM compare, or a face-rec pipeline.
+
+### Tier-2 gaze: control law (`look-at-target`)
+
+The geometry/limits live in ChatterBot `docs/gaze-support.md` §1 (authoritative);
+the agent mirrors them as constants: pan ∈ [10,170] (0=right, 170=left),
+tilt ∈ [30,150] (30=up, 115=horizontal, 150=~45°down), neutral ≈ pan 90 tilt 113.
+
+- **Perception → control.** Each cycle asks the vision model for the target's
+  position relative to frame center as **coarse buckets** — `h_pos` ∈
+  {left_a_lot, left_a_little, centered, right_a_little, right_a_lot}, `v_pos`
+  likewise up/down (structured output via `response_schema`). Coarse buckets are
+  what a general VLM does reliably; precise pixel/degree regression is not.
+- **Buckets → bounded delta.** a_lot ≈ 18°, a_little ≈ 7°, centered = 0. Signs
+  (camera `hflip/vflip` false): target left → pan **+**, target up → tilt **−**.
+  Applied relative to the current pose and **clamped to the envelope** every step.
+- **Acquire then center.** If the target isn't visible, sweep a fixed set of
+  in-envelope waypoints (3 pan × 2 tilt, near horizontal), capturing at each,
+  until it appears or the set is exhausted (`empty: couldn't find …`). Then the
+  centering loop runs to a cap (≤5 iters) with a halve-on-flip anti-oscillation
+  guard, stopping when both axes read `centered`.
+- **Once, not continuous.** It centers a roughly-static target and returns the
+  final pose + frame (attached as the model's view via the §8 image contract,
+  plus a `/local` display URL). A moving subject gets best-effort, not tracking.
+- **Speed/settle/limits are also Pi-side** (`gaze-support.md` §2): envelope
+  clamp, a `max_deg_per_s` rate limit, and `arrived`-means-settled (kills capture
+  blur). The agent clamps and bounds too (defense-in-depth) but relies on the Pi
+  for settle and rate.
+- **Cost.** Assessment frames are downscaled to ~640×360 (`jpeg_to_data_uri`
+  `max_wh`); the final returned frame is full res. Each cycle ≈ move+settle +
+  capture + one VLM call.
+
+## 9. Topic contract (current vs to-build)
 
 JSON unless marked **binary**; all carry `ts` (unix epoch float). Authoritative
 list: `chatterbot/lib/topics.py` + `DESIGN.md §5`.
@@ -146,12 +225,12 @@ list: `chatterbot/lib/topics.py` + `DESIGN.md §5`.
 | `chatter/head/mode` | Jill→Pi | `{ts, doa_follow}` | subscribed; reflex not wired |
 | `chatter/camera/capture` | Jill→Pi | `{ts, request_id}` (width/height currently ignored) | **implemented** |
 | `chatter/camera/image` | Pi→Jill | `{ts, request_id, format:"jpeg_base64", data_base64, width, height, head_pose, settled}` | **implemented** |
-| `chatter/voice/event` | Pi→Jill | `{ts, vad: start\|stop, doa_deg, confidence}` | declared, not built |
-| `chatter/audio/in` | Pi→Jill | **binary** PCM + `{seq, ts}`, VAD-gated | declared, not built |
+| `chatter/voice/event` | Pi→Jill | `{ts, vad: start\|active\|stop, doa_deg, confidence}` | **implemented (Pi)** |
+| `chatter/audio/in` | Pi→Jill | **binary** `audio_frame` header + S16_LE PCM, VAD-gated | **implemented (Pi)** |
 | `chatter/audio/out` | Jill→Pi | **binary** PCM + `{seq, ts}` (TTS) | declared, not built |
 | `chatter/status` | Pi→Jill | `{ts, processes, ...}` | declared, not built |
 
-## 9. Open questions
+## 10. Open questions
 
 - DOA-degrees → pan-angle mapping + smoothing (avoid jittery reflex) — Pi side.
 - Reflex/deliberative arbitration policy: explicit-cmd-override vs mode toggle
