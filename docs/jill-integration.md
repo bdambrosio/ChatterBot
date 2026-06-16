@@ -2,7 +2,7 @@
 
 Status: **design + integration note.** Records how the Cognitive_workbench agent
 ("Jill") drives and senses through the ChatterBot head. The ChatterBot/Pi side
-(head, camera, `mic_driver`, DoA reflex) is implemented and live-verified on
+(head, camera, `xvf_audio`, DoA reflex) is implemented and live-verified on
 hardware; the Cognitive_workbench side is partially built (head/camera tools,
 vision) — see §7. Written to be shared with the Cognitive_workbench project as
 well as kept here. Companion docs (in the ChatterBot repo): `docs/DESIGN.md`
@@ -143,11 +143,15 @@ this later).
 ## 7. What each project must build
 
 **ChatterBot (Pi side):**
-- **DONE** — `mic_driver`: XVF3800 capture + control-channel VAD/DOA → publishes
-  `voice/event` (start/active/stop + `doa_deg`) and VAD-gated binary `audio/in`
-  (`chatterbot/services/mic_driver.py`, `chatterbot/xvf3800.py`,
+- **DONE** — `xvf_audio`: the single duplex owner of the XVF3800. Captures +
+  control-channel VAD/DOA → publishes `voice/event` (start/active/stop +
+  `doa_deg`) and VAD-gated binary `audio/in`; and plays `audio/out` TTS through
+  the device (silence ↔ TTS on one persistent stream — AEC reference + capture
+  keepalive), muting `audio/in` while speaking (self-voice gating)
+  (`chatterbot/services/xvf_audio.py`, `chatterbot/xvf3800.py`,
   `chatterbot/lib/audio_frame.py`). Consumer guide: `docs/cw-voice-sensor.md`;
-  device bring-up: `docs/xvf3800-setup.md`. Live-verified DoA/VAD on the Pi.
+  bring-up: `docs/xvf3800-setup.md`; playback design: `docs/audio-out-design.md`.
+  Live-verified DoA/VAD/capture on the Pi (playback pending live test).
 - **DONE** — DoA reflex: `head_service` consumes `chatter/voice/event` and can
   turn the head toward the talker when `doa_follow` is set — saccade (glance +
   settle, goes deaf while moving so servo noise doesn't feed back) with a
@@ -157,9 +161,8 @@ this later).
   reflex — CW sends `head/cmd {doa_deg}` on hearing "Jill" and the Pi maps the
   bearing to pan via its calibrated `config.json` `head.doa`
   (`docs/cw-voice-sensor.md` §5, calibration in `docs/xvf3800-setup.md` §6).
-- TODO — `audio/out` playback: merge `mic_driver` + `audio_out` into one duplex
-  `xvf_audio` service that plays TTS through the XVF3800 (AEC-clean, 16 kHz).
-  Design + locked decisions: `docs/audio-out-design.md`.
+- TODO — `audio/out` live test against CW's ElevenLabs `--say` (the player is
+  built; needs an end-to-end check on hardware).
 - TODO — Head arbitration policy refinements (§5).
 
 **Cognitive_workbench (Jill side):**
@@ -173,11 +176,16 @@ this later).
   no extra reasoning hop. Live-verified against the Pi.
 - **DONE** — captured-image-as-vision wiring + Tier-2 closed-loop gaze
   (`look-at-target`) (§8).
-- TODO — `mic_driver` consumer: dedicated isolated zenoh session already exists
-  in `ChatterLink`; the STT path reuses it.
+- **DONE** — TTS → `audio/out` (output "say" path): `voice_pipeline.synthesize`
+  (ElevenLabs `pcm_16000`) + `pack_audio_frame` (the CBA1 codec, inverse of the
+  Pi's `unpack`) + `ChatterLink.send_audio_out`; voice-sourced replies synthesize
+  off-thread (`_speak_async`) and speak iff `source == ACOUSTIC_SOURCE`. Standalone
+  `voice_harness.py --say "…"`. Frame round-trip verified; **self-voice gating is
+  Pi-side** (xvf_audio mutes `audio/in` while speaking) so CW keeps no mute flag.
+- TODO — `xvf_audio` consumer (voice-sensor input): isolated zenoh session already
+  exists in `ChatterLink`; the STT path reuses it.
 - TODO — VAD-segment → STT → text injection into the chat-loop with source tags.
 - TODO — generic sensor-event → concern-activation ingress (§4).
-- TODO — TTS → `audio/out`, with self-voice gating (§6).
 - TODO — Tier-3 vision (reference-image library) (§8).
 
 ## 8. Vision: captured images as model input

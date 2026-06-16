@@ -15,7 +15,7 @@ driver to install** — the work is a udev rule and two pip packages.
 
 No `seeed-voicecard` kernel module (that was for the old I2S HAT mics). No
 `cmake`/build — the vendor repo ships a prebuilt `rpi_64bit/xvf_host` and a
-Python control SDK, but `mic_driver` talks to the device directly via `pyusb`.
+Python control SDK, but `xvf_audio` talks to the device directly via `pyusb`.
 
 ## 1. Verify the device enumerated
 
@@ -38,10 +38,11 @@ aplay -D hw:Array -f S16_LE -c2 -r16000 /dev/zero &        # silence keepalive
 arecord -D hw:Array -f S16_LE -c2 -r16000 -d3 /tmp/x.wav   # now captures audio
 ```
 
-`chatterbot.xvf3800.XVF3800Audio` handles this automatically (holds an
-`aplay /dev/zero` keepalive). When `audio_out` (TTS playback) is built it should
-**own that playback stream** instead, so TTS doubles as both the AEC reference
-and the capture keepalive — see DESIGN.md §7.
+`chatterbot.xvf3800.XVF3800Audio` handles this automatically: it holds a
+persistent `aplay` stream (fed from stdin) open for the whole session. The
+`xvf_audio` service writes **silence when idle and TTS when speaking** into that
+one stream, so it is simultaneously the capture keepalive *and* the AEC
+loudspeaker reference — see DESIGN.md §7 and `docs/audio-out-design.md`.
 
 ## 3. Install the control-channel deps (DoA / VAD)
 
@@ -96,6 +97,5 @@ command table: `AEC_AZIMUTH_VALUES` (per-beam azimuths), `AEC_SPENERGY_VALUES`
     and how long an explicit `head/cmd` suspends the reflex.
   The reflex stays off until `doa_follow` is set, so an uncalibrated mapping
   never moves the head on its own.
-- **Confidence:** `mic_driver` currently reports a coarse confidence from the VAD
+- **Confidence:** `xvf_audio` currently reports a coarse confidence from the VAD
   flag. Reading `AEC_SPENERGY_VALUES` would give a graded value.
-- **audio_out ownership** of the playback stream (§2).

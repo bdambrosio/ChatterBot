@@ -41,12 +41,13 @@ captures, ships, and actuates.
 - `head_controller` — **sole owner of the servos.** Wraps the existing
   `HeadController`. Subscribes to head commands; arbitrates between desktop
   commands and the local DOA reflex (see §6).
-- `mic_driver` — bridges the XVF3800: one loop captures processed PCM audio
-  (ALSA), another polls the control channel for VAD/DOA. Publishes voice events
-  and (gated) audio frames.
+- `xvf_audio` — the single duplex owner of the XVF3800 (implemented as the merge
+  of the originally-separate `mic_driver` and `audio_out`, because the device's
+  full-duplex AEC coupling wants one owner). Captures processed PCM (ALSA), polls
+  the control channel for VAD/DOA, publishes voice events + (gated) audio frames,
+  and plays `audio/out` TTS through the device so it serves as the AEC reference
+  (§7). See `docs/audio-out-design.md`.
 - `camera_driver` — captures a JPEG still on command, tags it with head pose.
-- `audio_out` — plays TTS PCM received from the desktop, routed through the
-  XVF3800 so it serves as the AEC reference (§7).
 - `status` / watchdog — process health + heartbeat enforcement (Body's safety
   triad, slimmed down).
 

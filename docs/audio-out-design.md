@@ -1,9 +1,9 @@
 # ChatterBot audio-out ("say") design
 
-Status: **design, pre-implementation.** How the bot accepts audio to speak. Read
-alongside `DESIGN.md §7` (AEC), `jill-integration.md` (the CW binding), and
-`xvf3800-setup.md` (device facts). To be shared with Cognitive_workbench for
-comment.
+Status: **Pi player built; live end-to-end test pending.** How the bot accepts
+audio to speak. Read alongside `DESIGN.md §7` (AEC), `jill-integration.md` (the
+CW binding), and `xvf3800-setup.md` (device facts). Shared with
+Cognitive_workbench (CW's ElevenLabs "say" path is built).
 
 ## Locked decisions
 
@@ -89,16 +89,18 @@ the AEC reference is always clocked, and gating is a local boolean.
 ## Build checklist
 
 **ChatterBot (Pi):**
-- [ ] `xvf_audio` service: fold in `mic_driver`; add the persistent
-      pipe-fed playback loop (silence ↔ queued TTS), mono→2 ch upmix.
-- [ ] Subscribe `chatter/audio/out` (binary), enqueue utterance PCM for playback.
-- [ ] `tts_playing` flag → suppress `audio/in` while speaking.
-- [ ] Retire the `mic_driver` `aplay /dev/zero` keepalive (now subsumed).
+- [x] `xvf_audio` service: folded in `mic_driver`; persistent stdin-fed playback
+      loop (silence ↔ queued TTS), mono→2 ch upmix, ~150 ms silence prime.
+- [x] Subscribe `chatter/audio/out` (binary), enqueue utterance PCM for playback.
+- [x] `tts_playing` flag → suppress `audio/in` (and `voice/event`) while speaking.
+- [x] Retired the `aplay /dev/zero` keepalive (subsumed by the duplex stream).
+- [ ] **Live end-to-end test** against CW's `--say` on hardware.
 - [ ] (v2) `audio/out/ctl` begin/end/cancel; streamed frames + jitter buffer.
 
 **Cognitive_workbench (Jill):**
-- [ ] ElevenLabs `pcm_16000` synth → one `audio_frame` per utterance → `audio/out`.
-- [ ] Don't ingest own TTS as user input (gating; §6).
+- [x] ElevenLabs `pcm_16000` synth → one `audio_frame` per utterance → `audio/out`
+      (`voice_pipeline.synthesize`, `ChatterLink.send_audio_out`, `voice_harness --say`).
+- [x] Self-voice gating handled Pi-side, so CW needs no mute flag.
 - [ ] (v2) stream frames + barge-in via `audio/out/ctl`.
 
 ## Still open (for CW comment)

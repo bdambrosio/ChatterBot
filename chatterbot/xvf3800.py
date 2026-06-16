@@ -81,12 +81,15 @@ class XVF3800Control:
 
 
 class XVF3800Audio:
-    """Full-duplex ALSA capture from the XVF3800 via ``arecord``/``aplay``.
+    """Full-duplex ALSA audio for the XVF3800 via ``arecord``/``aplay``.
 
-    Opens a silence playback keepalive (``aplay /dev/zero``) so the capture
-    endpoint actually streams, then yields fixed-size raw PCM frames from
-    ``arecord``. Using subprocesses keeps the Pi free of an ALSA binding dep and
-    matches the verified manual pipeline.
+    Capture: ``read_frame()`` yields fixed-size raw PCM frames from ``arecord``.
+    Playback: a persistent ``aplay`` reads raw PCM from **stdin** — the caller
+    feeds it continuously (silence when idle, TTS when speaking). That open
+    playback stream is what lets the capture endpoint stream at all (the XVF3800
+    clocks capture off playback for AEC; capture-alone EIOs), and it doubles as
+    the AEC loudspeaker reference. Subprocesses keep the Pi free of an ALSA
+    binding dep and match the verified manual pipeline.
     """
 
     def __init__(self, capture_device="plughw:CARD=Array",
@@ -103,11 +106,18 @@ class XVF3800Audio:
 
     def start(self):
         common = ["-f", "S16_LE", "-c", str(self.channels), "-r", str(self.sample_rate)]
-        # Silence keepalive: without an open playback stream the capture endpoint
-        # returns EIO (the XVF3800 clocks capture off playback for AEC).
+        # Persistent playback reading raw PCM from stdin. A small buffer keeps the
+        # idle-silence backlog short so queued TTS starts promptly; aplay blocks
+        # our writes when full, which paces the writer to real time.
         self._play = subprocess.Popen(
-            ["aplay", "-q", "-D", self.playback_device, *common, "/dev/zero"],
+            ["aplay", "-q", "-D", self.playback_device, *common, "-t", "raw",
+             "--buffer-time", "200000", "--period-time", "20000"],
+            stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Prime the playback buffer with ~150 ms of silence so the DAC clock is
+        # running before capture opens — capture EIOs without an active playback
+        # clock (the AEC full-duplex coupling).
+        self.write_playback(bytes(int(self.sample_rate * 0.15) * self.channels * 2))
         self._cap = subprocess.Popen(
             ["arecord", "-q", "-D", self.capture_device, *common, "-t", "raw"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -122,7 +132,25 @@ class XVF3800Audio:
             buf += chunk
         return bytes(buf)
 
+    def write_playback(self, data):
+        """Write one chunk of interleaved ``channels``-ch PCM to the speaker.
+
+        Blocks when aplay's buffer is full (real-time back-pressure). Returns
+        False if the playback stream has died.
+        """
+        try:
+            self._play.stdin.write(data)
+            self._play.stdin.flush()
+            return True
+        except (BrokenPipeError, ValueError):
+            return False
+
     def close(self):
+        if self._play and self._play.stdin:
+            try:
+                self._play.stdin.close()
+            except (BrokenPipeError, ValueError):
+                pass
         for proc in (self._cap, self._play):
             if proc and proc.poll() is None:
                 proc.terminate()

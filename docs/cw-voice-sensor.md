@@ -1,7 +1,7 @@
 # Building a Cognitive_workbench voice sensor on `chatter/voice/event`
 
 Status: **implementation guide** for the Cognitive_workbench (CW / "Jill") side.
-The Pi `mic_driver` is implemented and publishing; this doc tells the CW project
+The Pi `xvf_audio` is implemented and publishing; this doc tells the CW project
 how to consume it. Read alongside `docs/jill-integration.md` (§3 tools-vs-sensors,
 §4 sensor→chat-loop→concerns, §6 self-voice gating) — this is the concrete
 binding of the "voice sensor" promised there.
@@ -12,7 +12,7 @@ binding of the "voice sensor" promised there.
 
 ## 1. What the Pi publishes
 
-The XVF3800 does VAD + DoA in firmware; `mic_driver` (Pi) gates on it and
+The XVF3800 does VAD + DoA in firmware; `xvf_audio` (Pi) gates on it and
 publishes two streams over the same zenoh router CW already talks to:
 
 | Topic | Payload | When |
@@ -39,7 +39,7 @@ A typical utterance on `chatter/voice/event`:
   heading depends on how the array is physically mounted; treat it as a relative
   bearing and calibrate before mapping to anything absolute (see §6).
 - `confidence` — coarse for now: `1.0` while the firmware VAD is high, `0.5`
-  during the hangover tail, `0.0` on `stop`. (Will become graded if `mic_driver`
+  during the hangover tail, `0.0` on `stop`. (Will become graded if `xvf_audio`
   starts reading per-beam speech energy.)
 
 **`start`/`stop` are your utterance delimiters.** Everything on `audio/in`
@@ -150,7 +150,7 @@ energy-based and fires on non-speech noise (chair squeaks, claps), so an
 always-on reflex twitches. Driving the turn from CW, gated on recognizing
 "Jill…", means the head only orients when actually addressed.
 
-The mechanism reuses what mic_driver already publishes — no new Pi work:
+The mechanism reuses what xvf_audio already publishes — no new Pi work:
 
 1. Track the latest talker bearing from `voice/event` (you're already
    subscribed, §2). Keep the `doa_deg` from the current utterance's `start`.
