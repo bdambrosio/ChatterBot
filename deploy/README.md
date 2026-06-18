@@ -72,14 +72,20 @@ into the system Python instead, edit `ExecStart` to `/usr/bin/python3`. Adjust
 
 ## XVF3800 LED ring night dimming (`xvf_led_schedule.sh`)
 
-Dims the mic array's LED ring to brightness 2 overnight (20:00–06:00 local) and
-restores it to 127 by day. It drives the LEDs through the prebuilt `xvf_host`
-tool from the upstream respeaker repo (expected at
+Turns the mic array's LED ring **off** overnight (20:00–06:00 local) and restores
+DoA mode by day. It drives the LEDs through the prebuilt `xvf_host` tool from the
+upstream respeaker repo (expected at
 `~/reSpeaker_XVF3800_USB_4MIC_ARRAY/host_control/rpi_64bit/`), which coexists
-fine with the running audio service. The script picks the level from the current
-hour, so a reboot at any time lands on the right brightness.
+fine with the running audio service. The script picks the state from the current
+hour, so a reboot at any time lands correctly.
 
-Edit `NIGHT`/`DAY` in the script to change levels. Then install:
+It switches `LED_EFFECT` (`0=off … 4=doa`), **not** `LED_BRIGHTNESS`. The device
+runs DoA mode by default, and `LED_BRIGHTNESS` only applies to breath/rainbow
+modes — it's a silent no-op in DoA, so brightness writes never dimmed anything.
+To keep DoA but dimmer instead of fully off, lower `LED_DOA_COLOR` at night
+(e.g. `0x000810`) and restore `0x002040` by day.
+
+Edit `NIGHT`/`DAY` in the script to change the effect. Then install:
 
 ```bash
 install -Dm755 deploy/xvf_led_schedule.sh ~/bin/xvf_led_schedule.sh
